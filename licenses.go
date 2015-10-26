@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/pmezard/licenses/assets"
 )
 
 type Template struct {
@@ -21,16 +23,11 @@ type Template struct {
 	Words    map[string]bool
 }
 
-func parseTemplate(path string) (*Template, error) {
-	fp, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
+func parseTemplate(content string) (*Template, error) {
 	t := Template{}
 	text := []byte{}
 	state := 0
-	defer fp.Close()
-	scanner := bufio.NewScanner(fp)
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if state == 0 {
@@ -58,18 +55,14 @@ func parseTemplate(path string) (*Template, error) {
 
 func loadTemplates(dir string) ([]*Template, error) {
 	templates := []*Template{}
-	err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || !fi.Mode().IsRegular() {
-			return err
-		}
-		templ, err := parseTemplate(path)
+	for _, a := range assets.Assets {
+		templ, err := parseTemplate(a.Content)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		templates = append(templates, templ)
-		return nil
-	})
-	return templates, err
+	}
+	return templates, nil
 }
 
 var (
