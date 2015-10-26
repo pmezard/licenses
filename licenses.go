@@ -79,7 +79,6 @@ var (
 func makeWordSet(data []byte) map[string]bool {
 	words := map[string]bool{}
 	data = bytes.ToLower(data)
-	data = bytes.Replace(data, []byte("\r\n"), []byte("\n"), -1)
 	data = reCopyright.ReplaceAll(data, nil)
 	matches := reWords.FindAll(data, -1)
 	for _, m := range matches {
