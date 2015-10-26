@@ -150,15 +150,31 @@ type PkgInfo struct {
 	ImportPath string
 }
 
-func getPackageInfo(pkg string) (*PkgInfo, error) {
-	cmd := exec.Command("go", "list", "-json", pkg)
+func getPackagesInfo(pkgs []string) ([]*PkgInfo, error) {
+	args := []string{"list", "-json"}
+	// TODO: split the list for platforms which do not support massive argument
+	// lists.
+	args = append(args, pkgs...)
+	cmd := exec.Command("go", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("go list -f {{.Dir}} %s failed with: %s", pkg, err)
+		return nil, fmt.Errorf("go list -json failed with: %s", err)
 	}
-	info := &PkgInfo{}
-	err = json.Unmarshal(out, info)
-	return info, err
+	infos := make([]*PkgInfo, 0, len(pkgs))
+	decoder := json.NewDecoder(bytes.NewBuffer(out))
+	for _, pkg := range pkgs {
+		info := &PkgInfo{}
+		err := decoder.Decode(info)
+		if err != nil {
+			return nil, fmt.Errorf("could not retrieve package information for %s", pkg)
+		}
+		if pkg != info.ImportPath {
+			return nil, fmt.Errorf("package information mismatch: asked for %s, got %s",
+				pkg, info.ImportPath)
+		}
+		infos = append(infos, info)
+	}
+	return infos, err
 }
 
 var (
@@ -241,13 +257,13 @@ func listLicenses(args []string) error {
 		stdSet[n] = true
 	}
 	w := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
-	for _, dep := range deps {
-		if stdSet[dep] {
+	infos, err := getPackagesInfo(deps)
+	if err != nil {
+		return err
+	}
+	for _, info := range infos {
+		if stdSet[info.ImportPath] {
 			continue
-		}
-		info, err := getPackageInfo(dep)
-		if err != nil {
-			return err
 		}
 		path, err := findLicense(info)
 		if err != nil {
@@ -266,7 +282,7 @@ func listLicenses(args []string) error {
 				license = fmt.Sprintf("? (%s, %2d%%)", t.Title, int(100*score))
 			}
 		}
-		w.Write([]byte(dep + "\t" + license + "\n"))
+		w.Write([]byte(info.ImportPath + "\t" + license + "\n"))
 	}
 	return w.Flush()
 }
