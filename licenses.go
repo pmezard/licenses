@@ -73,7 +73,7 @@ func loadTemplates(dir string) ([]*Template, error) {
 var (
 	reWords     = regexp.MustCompile(`[\w']+`)
 	reCopyright = regexp.MustCompile(
-		`\s*Copyright (©|\(c\)|\xC2\xA9)? ?(\d{4}|\[year\])(.*)?\s*`)
+		`\s*Copyright (?:©|\(c\)|\xC2\xA9)? ?(?:\d{4}|\[year\]).*?\s*`)
 )
 
 func makeWordSet(data []byte) map[string]bool {
