@@ -18,7 +18,7 @@ import (
 type Template struct {
 	Title    string
 	Nickname string
-	Text     []byte
+	Words    map[string]bool
 }
 
 func parseTemplate(path string) (*Template, error) {
@@ -27,6 +27,7 @@ func parseTemplate(path string) (*Template, error) {
 		return nil, err
 	}
 	t := Template{}
+	text := []byte{}
 	state := 0
 	defer fp.Close()
 	scanner := bufio.NewScanner(fp)
@@ -47,10 +48,11 @@ func parseTemplate(path string) (*Template, error) {
 				}
 			}
 		} else if state == 2 {
-			t.Text = append(t.Text, scanner.Bytes()...)
-			t.Text = append(t.Text, []byte("\n")...)
+			text = append(text, scanner.Bytes()...)
+			text = append(text, []byte("\n")...)
 		}
 	}
+	t.Words = makeWordSet(text)
 	return &t, scanner.Err()
 }
 
@@ -92,14 +94,13 @@ func matchTemplates(license []byte, templates []*Template) (*Template, float64) 
 	var bestTemplate *Template
 	words := makeWordSet(license)
 	for _, t := range templates {
-		templWords := makeWordSet(t.Text)
 		common := 0
 		for w := range words {
-			if _, ok := templWords[w]; ok {
+			if _, ok := t.Words[w]; ok {
 				common++
 			}
 		}
-		score := 2 * float64(common) / (float64(len(words)) + float64(len(templWords)))
+		score := 2 * float64(common) / (float64(len(words)) + float64(len(t.Words)))
 		if score > bestScore {
 			bestScore = score
 			bestTemplate = t
@@ -287,6 +288,7 @@ func listLicenses(args []string) error {
 }
 
 func main() {
+	//	defer profile.Start(profile.CPUProfile).Stop()
 	err := listLicenses(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
