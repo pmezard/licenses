@@ -117,13 +117,25 @@ func fixEnv(gopath string) []string {
 	return kept
 }
 
+type MissingError struct {
+	Err string
+}
+
+func (err *MissingError) Error() string {
+	return err.Err
+}
+
 func listDependencies(gopath, pkg string) ([]string, error) {
 	templ := "{{range .Deps}}{{.}}|{{end}}"
 	cmd := exec.Command("go", "list", "-f", templ, pkg)
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("'go list -f %s %s' failed with: %s", templ, pkg, err)
+		if strings.Contains(string(out), "cannot find package") {
+			return nil, &MissingError{Err: string(out)}
+		}
+		return nil, fmt.Errorf("'go list -f %s %s' failed with:\n%s",
+			templ, pkg, string(out))
 	}
 	deps := []string{}
 	for _, s := range strings.Split(string(out), "|") {
@@ -141,7 +153,7 @@ func listStandardPackages(gopath string) ([]string, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("go list std failed with: %s", err)
+		return nil, fmt.Errorf("go list std failed with:\n%s", string(out))
 	}
 	names := []string{}
 	for _, s := range strings.Split(string(out), "\n") {
@@ -169,7 +181,8 @@ func getPackagesInfo(gopath string, pkgs []string) ([]*PkgInfo, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("go %s failed with: %s", strings.Join(args, " "), err)
+		return nil, fmt.Errorf("go %s failed with:\n%s",
+			strings.Join(args, " "), string(out))
 	}
 	infos := make([]*PkgInfo, 0, len(pkgs))
 	decoder := json.NewDecoder(bytes.NewBuffer(out))
@@ -260,6 +273,9 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 	}
 	deps, err := listDependencies(gopath, pkg)
 	if err != nil {
+		if _, ok := err.(*MissingError); ok {
+			return nil, err
+		}
 		return nil, fmt.Errorf("could not list %s dependencies: %s", pkg, err)
 	}
 	deps = append(deps, pkg)

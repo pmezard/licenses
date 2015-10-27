@@ -106,3 +106,13 @@ func TestMainWithAliasedDependencies(t *testing.T) {
 	}
 }
 */
+
+func TestMissingPackage(t *testing.T) {
+	_, err := listTestLicenses("colors/missing")
+	if err == nil {
+		t.Fatal("no error on missing package")
+	}
+	if _, ok := err.(*MissingError); !ok {
+		t.Fatalf("MissingError expected")
+	}
+}
