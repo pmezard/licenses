@@ -116,3 +116,12 @@ func TestMissingPackage(t *testing.T) {
 		t.Fatalf("MissingError expected")
 	}
 }
+
+func TestMismatch(t *testing.T) {
+	err := compareTestLicenses("colors/yellow", []testResult{
+		{Package: "colors/yellow", License: "Microsoft Reciprocal License", Score: 25},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
