@@ -102,9 +102,25 @@ func matchTemplates(license []byte, templates []*Template) (*Template, float64) 
 	return bestTemplate, bestScore
 }
 
-func listDependencies(pkg string) ([]string, error) {
+func fixEnv(gopath string) []string {
+	if gopath == "" {
+		return nil
+	}
+	kept := []string{
+		"GOPATH=" + gopath,
+	}
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(env, "GOPATH=") {
+			kept = append(kept, env)
+		}
+	}
+	return kept
+}
+
+func listDependencies(gopath, pkg string) ([]string, error) {
 	templ := "{{range .Deps}}{{.}}|{{end}}"
 	cmd := exec.Command("go", "list", "-f", templ, pkg)
+	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("'go list -f %s %s' failed with: %s", templ, pkg, err)
@@ -120,8 +136,9 @@ func listDependencies(pkg string) ([]string, error) {
 	return deps, nil
 }
 
-func listStandardPackages() ([]string, error) {
+func listStandardPackages(gopath string) ([]string, error) {
 	cmd := exec.Command("go", "list", "std")
+	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("go list std failed with: %s", err)
@@ -143,12 +160,13 @@ type PkgInfo struct {
 	ImportPath string
 }
 
-func getPackagesInfo(pkgs []string) ([]*PkgInfo, error) {
+func getPackagesInfo(gopath string, pkgs []string) ([]*PkgInfo, error) {
 	args := []string{"list", "-json"}
 	// TODO: split the list for platforms which do not support massive argument
 	// lists.
 	args = append(args, pkgs...)
 	cmd := exec.Command("go", args...)
+	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("go list -json failed with: %s", err)
@@ -178,7 +196,7 @@ var (
 		"COPYING",
 		"COPYRIGHT",
 	}
-	reLicense = regexp.MustCompile(`(?i)^(` +
+	reLicense = regexp.MustCompile(`(?i)^(?:` +
 		`((?:un)?licen[sc]e)|` +
 		`((?:un)?licen[sc]e\.(?:md|markdown|txt))|` +
 		`(copy(?:ing|right)(?:\.[^.]+)?)|` +
@@ -235,17 +253,17 @@ type License struct {
 	Template *Template
 }
 
-func listLicenses(pkg string) ([]License, error) {
+func listLicenses(gopath, pkg string) ([]License, error) {
 	templates, err := loadTemplates()
 	if err != nil {
 		return nil, err
 	}
-	deps, err := listDependencies(pkg)
+	deps, err := listDependencies(gopath, pkg)
 	if err != nil {
 		return nil, fmt.Errorf("could not list %s dependencies: %s", pkg, err)
 	}
 	deps = append(deps, pkg)
-	std, err := listStandardPackages()
+	std, err := listStandardPackages(gopath)
 	if err != nil {
 		return nil, fmt.Errorf("could not list standard packages: %s", err)
 	}
@@ -253,7 +271,7 @@ func listLicenses(pkg string) ([]License, error) {
 	for _, n := range std {
 		stdSet[n] = true
 	}
-	infos, err := getPackagesInfo(deps)
+	infos, err := getPackagesInfo(gopath, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +303,7 @@ func listLicenses(pkg string) ([]License, error) {
 
 func printLicenses(args []string) error {
 	confidence := 0.9
-	licenses, err := listLicenses(args[0])
+	licenses, err := listLicenses("", args[0])
 	if err != nil {
 		return err
 	}
