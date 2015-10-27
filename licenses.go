@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -317,9 +318,27 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 	return licenses, nil
 }
 
-func printLicenses(args []string) error {
+func printLicenses() error {
+	flag.Usage = func() {
+		fmt.Println(`Usage: licenses IMPORTPATH
+
+licenses lists all dependencies of specified package or command, excluding
+standard library packages, and prints their licenses. Licenses are detected by
+looking for files named like LICENSE, COPYING, COPYRIGHT and other variants in
+the package directory, and its parent directories until one is found. Files
+content is matched against a set of well-known licenses and the best match is
+displayed along with its score.
+`)
+		os.Exit(1)
+	}
+	flag.Parse()
+	if flag.NArg() != 1 {
+		return fmt.Errorf("expect a single package argument, got %d", flag.NArg())
+	}
+	pkg := flag.Arg(0)
+
 	confidence := 0.9
-	licenses, err := listLicenses("", args[0])
+	licenses, err := listLicenses("", pkg)
 	if err != nil {
 		return err
 	}
@@ -342,7 +361,7 @@ func printLicenses(args []string) error {
 }
 
 func main() {
-	err := printLicenses(os.Args[1:])
+	err := printLicenses()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
