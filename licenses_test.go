@@ -96,16 +96,17 @@ func TestMainWithDependencies(t *testing.T) {
 	}
 }
 
-/*
 func TestMainWithAliasedDependencies(t *testing.T) {
 	err := compareTestLicenses("colors/cmd/mix", []testResult{
-		{Package: "colors/green", License: "", Score: 0},
+		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "couleurs/red", License: "GNU Lesser General Public License v2.1",
+			Score: 98},
+		{Package: "colors/cmd/mix", License: "Academic Free License v3.0", Score: 96},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
-*/
 
 func TestMissingPackage(t *testing.T) {
 	_, err := listTestLicenses("colors/missing")
