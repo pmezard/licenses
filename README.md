@@ -21,4 +21,4 @@ vendor/golang.org/x/net/http2/hpack      ?
 
 Both the code and reference data were directly ported from:
 
-[https://github.com/benbalter/licensee](https://github.com/benbalter/licensee)
+  [https://github.com/benbalter/licensee](https://github.com/benbalter/licensee)
