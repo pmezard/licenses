@@ -265,6 +265,7 @@ type License struct {
 	Package  string
 	Score    float64
 	Template *Template
+	Path     string
 }
 
 func listLicenses(gopath, pkg string) ([]License, error) {
@@ -303,6 +304,7 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 		}
 		license := License{
 			Package: info.ImportPath,
+			Path:    path,
 		}
 		if path != "" {
 			data, err := ioutil.ReadFile(filepath.Join(info.Root, "src", path))
@@ -318,6 +320,84 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 	return licenses, nil
 }
 
+// longestCommonPrefix returns the longest common prefix over import path
+// components of supplied licenses.
+func longestCommonPrefix(licenses []License) string {
+	type Node struct {
+		Name     string
+		Children map[string]*Node
+	}
+	// Build a prefix tree. Not super efficient, but easy to do.
+	root := &Node{
+		Children: map[string]*Node{},
+	}
+	for _, l := range licenses {
+		n := root
+		for _, part := range strings.Split(l.Package, "/") {
+			c := n.Children[part]
+			if c == nil {
+				c = &Node{
+					Name:     part,
+					Children: map[string]*Node{},
+				}
+				n.Children[part] = c
+			}
+			n = c
+		}
+	}
+	n := root
+	prefix := []string{}
+	for {
+		if len(n.Children) != 1 {
+			break
+		}
+		for _, c := range n.Children {
+			prefix = append(prefix, c.Name)
+			n = c
+			break
+		}
+	}
+	return strings.Join(prefix, "/")
+}
+
+// groupLicenses returns the input licenses after grouping them by license path
+// and find their longest import path common prefix. Entries with empty paths
+// are left unchanged.
+func groupLicenses(licenses []License) ([]License, error) {
+	paths := map[string][]License{}
+	for _, l := range licenses {
+		if l.Path == "" {
+			continue
+		}
+		paths[l.Path] = append(paths[l.Path], l)
+	}
+	for k, v := range paths {
+		if len(v) <= 1 {
+			continue
+		}
+		prefix := longestCommonPrefix(v)
+		if prefix == "" {
+			return nil, fmt.Errorf(
+				"packages share the same license but not common prefix: %v", v)
+		}
+		l := v[0]
+		l.Package = prefix
+		paths[k] = []License{l}
+	}
+	kept := []License{}
+	for _, l := range licenses {
+		if l.Path == "" {
+			kept = append(kept, l)
+			continue
+		}
+		if v, ok := paths[l.Path]; ok {
+			kept = append(kept, v[0])
+			delete(paths, l.Path)
+		}
+	}
+	return kept, nil
+}
+
 func printLicenses() error {
 	flag.Usage = func() {
 		fmt.Println(`Usage: licenses IMPORTPATH
@@ -328,9 +408,13 @@ looking for files named like LICENSE, COPYING, COPYRIGHT and other variants in
 the package directory, and its parent directories until one is found. Files
 content is matched against a set of well-known licenses and the best match is
 displayed along with its score.
+
+With -a, all individual packages are displayed instead of grouping them by
+license files.
 `)
 		os.Exit(1)
 	}
+	all := flag.Bool("a", false, "display all individual packages")
 	flag.Parse()
 	if flag.NArg() != 1 {
 		return fmt.Errorf("expect a single package argument, got %d", flag.NArg())
@@ -341,6 +425,12 @@ displayed along with its score.
 	licenses, err := listLicenses("", pkg)
 	if err != nil {
 		return err
+	}
+	if !*all {
+		licenses, err = groupLicenses(licenses)
+		if err != nil {
+			return err
+		}
 	}
 	w := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
 	for _, l := range licenses {
