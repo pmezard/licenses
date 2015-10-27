@@ -75,3 +75,34 @@ func TestMultipleLicenses(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNoLicense(t *testing.T) {
+	err := compareTestLicenses("colors/green", []testResult{
+		{Package: "colors/green", License: "", Score: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMainWithDependencies(t *testing.T) {
+	// It also tests license retrieval in parent directory.
+	err := compareTestLicenses("colors/cmd/paint", []testResult{
+		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/cmd/paint", License: "Academic Free License v3.0", Score: 96},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+/*
+func TestMainWithAliasedDependencies(t *testing.T) {
+	err := compareTestLicenses("colors/cmd/mix", []testResult{
+		{Package: "colors/green", License: "", Score: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+*/

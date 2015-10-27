@@ -169,7 +169,7 @@ func getPackagesInfo(gopath string, pkgs []string) ([]*PkgInfo, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("go list -json failed with: %s", err)
+		return nil, fmt.Errorf("go %s failed with: %s", strings.Join(args, " "), err)
 	}
 	infos := make([]*PkgInfo, 0, len(pkgs))
 	decoder := json.NewDecoder(bytes.NewBuffer(out))
