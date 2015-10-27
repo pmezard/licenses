@@ -303,6 +303,15 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Cache matched licenses by path. Useful for package with a lot of
+	// subpackages like bleve.
+	type Match struct {
+		t     *Template
+		score float64
+	}
+	matched := map[string]Match{}
+
 	licenses := []License{}
 	for _, info := range infos {
 		if stdSet[info.ImportPath] {
@@ -317,13 +326,22 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 			Path:    path,
 		}
 		if path != "" {
-			data, err := ioutil.ReadFile(filepath.Join(info.Root, "src", path))
-			if err != nil {
-				return nil, err
+			fpath := filepath.Join(info.Root, "src", path)
+			m, ok := matched[fpath]
+			if !ok {
+				data, err := ioutil.ReadFile(fpath)
+				if err != nil {
+					return nil, err
+				}
+				t, score := matchTemplates(data, templates)
+				m = Match{
+					t:     t,
+					score: score,
+				}
+				matched[fpath] = m
 			}
-			t, score := matchTemplates(data, templates)
-			license.Score = score
-			license.Template = t
+			license.Score = m.score
+			license.Template = m.t
 		}
 		licenses = append(licenses, license)
 	}
