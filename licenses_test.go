@@ -69,7 +69,7 @@ func TestNoDependencies(t *testing.T) {
 
 func TestMultipleLicenses(t *testing.T) {
 	err := compareTestLicenses("colors/blue", []testResult{
-		{Package: "colors/blue", License: "Apache License 2.0", Score: 96},
+		{Package: "colors/blue", License: "Apache License 2.0", Score: 100},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestMainWithDependencies(t *testing.T) {
 	// It also tests license retrieval in parent directory.
 	err := compareTestLicenses("colors/cmd/paint", []testResult{
 		{Package: "colors/red", License: "MIT License", Score: 95},
-		{Package: "colors/cmd/paint", License: "Academic Free License v3.0", Score: 96},
+		{Package: "colors/cmd/paint", License: "Academic Free License v3.0", Score: 100},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -100,8 +100,8 @@ func TestMainWithAliasedDependencies(t *testing.T) {
 	err := compareTestLicenses("colors/cmd/mix", []testResult{
 		{Package: "colors/red", License: "MIT License", Score: 95},
 		{Package: "couleurs/red", License: "GNU Lesser General Public License v2.1",
-			Score: 98},
-		{Package: "colors/cmd/mix", License: "Academic Free License v3.0", Score: 96},
+			Score: 100},
+		{Package: "colors/cmd/mix", License: "Academic Free License v3.0", Score: 100},
 	})
 	if err != nil {
 		t.Fatal(err)

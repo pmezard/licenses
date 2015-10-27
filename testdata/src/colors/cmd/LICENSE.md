@@ -1,29 +1,3 @@
----
-title: Academic Free License v3.0
-source: http://opensource.org/licenses/afl-3.0
-
-description: The Academic Free License is a variant of the Open Source License that does not require that the source code of derivative works be disclosed. It contains explicit copyright and patent grants and reserves trademark rights in the author.
-
-hidden: true
-
-how: Create a text file (typically named LICENSE or LICENSE.txt) in the root of your source code and copy the text of the license into the file. Files licensed under OSL 3.0 must also include the notice "Licensed under the Academic Free License version 3.0" adjacent to the copyright notice.
-
-required:
-  - include-copyright
-
-permitted:
-  - commercial-use
-  - modifications
-  - distribution
-  - sublicense
-  - private-use
-  - patent-grant
-
-forbidden:
-  - trademark-use
-  - no-liability
-
----
 Academic Free License (“AFL”) v. 3.0
 
 This Academic Free License (the "License") applies to any original work of authorship (the "Original Work") whose owner (the "Licensor") has placed the following licensing notice adjacent to the copyright notice for the Original Work:
