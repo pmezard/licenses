@@ -83,6 +83,8 @@ func makeWordSet(data []byte) map[string]bool {
 	return words
 }
 
+// matchTemplates returns the best license template matching supplied data, and
+// its score between 0 and 1.
 func matchTemplates(license []byte, templates []*Template) (*Template, float64) {
 	bestScore := float64(-1)
 	var bestTemplate *Template
@@ -103,6 +105,8 @@ func matchTemplates(license []byte, templates []*Template) (*Template, float64) 
 	return bestTemplate, bestScore
 }
 
+// fixEnv returns a copy of the process environment where GOPATH is adjusted to
+// supplied value. It returns nil if gopath is empty.
 func fixEnv(gopath string) []string {
 	if gopath == "" {
 		return nil
@@ -218,6 +222,8 @@ var (
 		`)$`)
 )
 
+// scoreLicenseName returns a factor between 0 and 1 weighting how likely
+// supplied filename is a license file.
 func scoreLicenseName(name string) float64 {
 	m := reLicense.FindStringSubmatch(name)
 	switch {
@@ -235,6 +241,10 @@ func scoreLicenseName(name string) float64 {
 	return 0.
 }
 
+// findLicense looks for license files in package import path, and down to
+// parent directories until a file is found or $GOPATH/src is reached. It
+// returns the path and score of the best entry, an empty string if none was
+// found.
 func findLicense(info *PkgInfo) (string, error) {
 	path := info.ImportPath
 	for ; path != "."; path = filepath.Dir(path) {
