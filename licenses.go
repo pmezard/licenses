@@ -53,7 +53,7 @@ func parseTemplate(content string) (*Template, error) {
 	return &t, scanner.Err()
 }
 
-func loadTemplates(dir string) ([]*Template, error) {
+func loadTemplates() ([]*Template, error) {
 	templates := []*Template{}
 	for _, a := range assets.Assets {
 		templ, err := parseTemplate(a.Content)
@@ -229,60 +229,86 @@ func findLicense(info *PkgInfo) (string, error) {
 	return "", nil
 }
 
-func listLicenses(args []string) error {
-	confidence := 0.9
-	pkg := args[0]
-	templates, err := loadTemplates("templates")
+type License struct {
+	Package  string
+	Score    float64
+	Template *Template
+}
+
+func listLicenses(pkg string) ([]License, error) {
+	templates, err := loadTemplates()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	deps, err := listDependencies(pkg)
 	if err != nil {
-		return fmt.Errorf("could not list %s dependencies: %s", pkg, err)
+		return nil, fmt.Errorf("could not list %s dependencies: %s", pkg, err)
 	}
 	deps = append(deps, pkg)
 	std, err := listStandardPackages()
 	if err != nil {
-		return fmt.Errorf("could not list standard packages: %s", err)
+		return nil, fmt.Errorf("could not list standard packages: %s", err)
 	}
 	stdSet := map[string]bool{}
 	for _, n := range std {
 		stdSet[n] = true
 	}
-	w := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
 	infos, err := getPackagesInfo(deps)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	licenses := []License{}
 	for _, info := range infos {
 		if stdSet[info.ImportPath] {
 			continue
 		}
 		path, err := findLicense(info)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		license := "?"
+		license := License{
+			Package: info.ImportPath,
+		}
 		if path != "" {
 			data, err := ioutil.ReadFile(filepath.Join(info.Root, "src", path))
 			if err != nil {
-				return err
+				return nil, err
 			}
 			t, score := matchTemplates(data, templates)
-			if score >= confidence {
-				license = fmt.Sprintf("%s (%2d%%)", t.Title, int(100*score))
+			license.Score = score
+			license.Template = t
+		}
+		licenses = append(licenses, license)
+	}
+	return licenses, nil
+}
+
+func printLicenses(args []string) error {
+	confidence := 0.9
+	licenses, err := listLicenses(args[0])
+	if err != nil {
+		return err
+	}
+	w := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
+	for _, l := range licenses {
+		license := "?"
+		if l.Template != nil {
+			if l.Score >= confidence {
+				license = fmt.Sprintf("%s (%2d%%)", l.Template.Title, int(100*l.Score))
 			} else {
-				license = fmt.Sprintf("? (%s, %2d%%)", t.Title, int(100*score))
+				license = fmt.Sprintf("? (%s, %2d%%)", l.Template.Title, int(100*l.Score))
 			}
 		}
-		w.Write([]byte(info.ImportPath + "\t" + license + "\n"))
+		_, err = w.Write([]byte(l.Package + "\t" + license + "\n"))
+		if err != nil {
+			return err
+		}
 	}
 	return w.Flush()
 }
 
 func main() {
-	//	defer profile.Start(profile.CPUProfile).Stop()
-	err := listLicenses(os.Args[1:])
+	err := printLicenses(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
