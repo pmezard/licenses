@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/pmezard/licenses.png?branch=master)](https://travis-ci.org/pmezard/licenses)
+
 # What is it?
 
 `licenses` uses `go list` tool over a Go workspace to collect the dependencies
