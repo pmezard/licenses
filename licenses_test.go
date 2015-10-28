@@ -178,6 +178,19 @@ func TestBrokenDependency(t *testing.T) {
 	}
 }
 
+func TestPackageExpression(t *testing.T) {
+	err := compareTestLicenses([]string{"colors/cmd/..."}, []testResult{
+		{Package: "colors/cmd/mix", License: "Academic Free License v3.0", Score: 100},
+		{Package: "colors/cmd/paint", License: "Academic Free License v3.0", Score: 100},
+		{Package: "colors/red", License: "MIT License", Score: 98, Missing: 2},
+		{Package: "couleurs/red", License: "GNU Lesser General Public License v2.1",
+			Score: 100},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCleanLicenseData(t *testing.T) {
 	data := `The MIT License (MIT)
 

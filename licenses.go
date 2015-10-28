@@ -202,7 +202,39 @@ func (err *MissingError) Error() string {
 	return err.Err
 }
 
+// expandPackages takes a list of package or package expressions and invoke go
+// list to expand them to packages. In particular, it handles things like "..."
+// and ".".
+func expandPackages(gopath string, pkgs []string) ([]string, error) {
+	args := []string{"list"}
+	args = append(args, pkgs...)
+	cmd := exec.Command("go", args...)
+	cmd.Env = fixEnv(gopath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		output := string(out)
+		if strings.Contains(output, "cannot find package") ||
+			strings.Contains(output, "no buildable Go source files") {
+			return nil, &MissingError{Err: output}
+		}
+		return nil, fmt.Errorf("'go %s' failed with:\n%s",
+			strings.Join(args, " "), output)
+	}
+	names := []string{}
+	for _, s := range strings.Split(string(out), "\n") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			names = append(names, s)
+		}
+	}
+	return names, nil
+}
+
 func listPackagesAndDeps(gopath string, pkgs []string) ([]string, error) {
+	pkgs, err := expandPackages(gopath, pkgs)
+	if err != nil {
+		return nil, err
+	}
 	args := []string{"list", "-f", "{{range .Deps}}{{.}}|{{end}}"}
 	args = append(args, pkgs...)
 	cmd := exec.Command("go", args...)
@@ -237,20 +269,7 @@ func listPackagesAndDeps(gopath string, pkgs []string) ([]string, error) {
 }
 
 func listStandardPackages(gopath string) ([]string, error) {
-	cmd := exec.Command("go", "list", "std")
-	cmd.Env = fixEnv(gopath)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("go list std failed with:\n%s", string(out))
-	}
-	names := []string{}
-	for _, s := range strings.Split(string(out), "\n") {
-		s = strings.TrimSpace(s)
-		if s != "" {
-			names = append(names, s)
-		}
-	}
-	return names, nil
+	return expandPackages(gopath, []string{"std"})
 }
 
 type PkgError struct {
