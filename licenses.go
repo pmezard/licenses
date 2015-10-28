@@ -172,15 +172,20 @@ func listStandardPackages(gopath string) ([]string, error) {
 	return names, nil
 }
 
+type PkgError struct {
+	Err string
+}
+
 type PkgInfo struct {
 	Name       string
 	Dir        string
 	Root       string
 	ImportPath string
+	Error      *PkgError
 }
 
 func getPackagesInfo(gopath string, pkgs []string) ([]*PkgInfo, error) {
-	args := []string{"list", "-json"}
+	args := []string{"list", "-e", "-json"}
 	// TODO: split the list for platforms which do not support massive argument
 	// lists.
 	args = append(args, pkgs...)
@@ -202,6 +207,9 @@ func getPackagesInfo(gopath string, pkgs []string) ([]*PkgInfo, error) {
 		if pkg != info.ImportPath {
 			return nil, fmt.Errorf("package information mismatch: asked for %s, got %s",
 				pkg, info.ImportPath)
+		}
+		if info.Error != nil && info.Name == "" {
+			info.Name = info.ImportPath
 		}
 		infos = append(infos, info)
 	}
@@ -278,6 +286,7 @@ type License struct {
 	Score    float64
 	Template *Template
 	Path     string
+	Err      string
 }
 
 func listLicenses(gopath, pkg string) ([]License, error) {
@@ -316,6 +325,13 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 
 	licenses := []License{}
 	for _, info := range infos {
+		if info.Error != nil {
+			licenses = append(licenses, License{
+				Package: info.Name,
+				Err:     info.Error.Err,
+			})
+			continue
+		}
 		if stdSet[info.ImportPath] {
 			continue
 		}
@@ -473,6 +489,8 @@ license files.
 			} else {
 				license = fmt.Sprintf("? (%s, %2d%%)", l.Template.Title, int(100*l.Score))
 			}
+		} else if l.Err != "" {
+			license = strings.Replace(l.Err, "\n", " ", -1)
 		}
 		_, err = w.Write([]byte(l.Package + "\t" + license + "\n"))
 		if err != nil {

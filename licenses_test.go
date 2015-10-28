@@ -11,6 +11,7 @@ type testResult struct {
 	Package string
 	License string
 	Score   int
+	Err     string
 }
 
 func listTestLicenses(pkg string) ([]testResult, error) {
@@ -31,6 +32,9 @@ func listTestLicenses(pkg string) ([]testResult, error) {
 			r.License = l.Template.Title
 			r.Score = int(100 * l.Score)
 		}
+		if l.Err != "" {
+			r.Err = "some error"
+		}
 		res = append(res, r)
 	}
 	return res, nil
@@ -40,8 +44,11 @@ func compareTestLicenses(pkg string, wanted []testResult) error {
 	stringify := func(res []testResult) string {
 		parts := []string{}
 		for _, r := range res {
-			parts = append(parts,
-				fmt.Sprintf("%s \"%s\" %d%%", r.Package, r.License, r.Score))
+			s := fmt.Sprintf("%s \"%s\" %d%%", r.Package, r.License, r.Score)
+			if r.Err != "" {
+				s += " " + r.Err
+			}
+			parts = append(parts, s)
 		}
 		return strings.Join(parts, "\n")
 	}
@@ -134,5 +141,28 @@ func TestNoBuildableGoSourceFiles(t *testing.T) {
 	}
 	if _, ok := err.(*MissingError); !ok {
 		t.Fatalf("MissingError expected")
+	}
+}
+
+func TestBroken(t *testing.T) {
+	err := compareTestLicenses("colors/broken", []testResult{
+		{Package: "colors/missing", License: "", Score: 0, Err: "some error"},
+		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/broken", License: "GNU General Public License v3.0", Score: 100},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBrokenDependency(t *testing.T) {
+	err := compareTestLicenses("colors/purple", []testResult{
+		{Package: "colors/broken", License: "GNU General Public License v3.0", Score: 100},
+		{Package: "colors/missing", License: "", Score: 0, Err: "some error"},
+		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/purple", License: "", Score: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
