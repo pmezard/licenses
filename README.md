@@ -19,9 +19,8 @@ vendor/golang.org/x/net/http2/hpack      ?
 
 Unmatched license words can be displayed with:
 ```
-$ licenses -w github.com/boltdb/bolt
-github.com/boltdb/bolt  MIT License (97%)
-                        unmatched words: 2013, ben, johnson
+github.com/steveyen/gtreap  MIT License (98%)
+                            -words: mit, license
 ```
 
 # Where does it come from?

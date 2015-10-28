@@ -113,23 +113,49 @@ func (s sortedWords) Less(i, j int) bool {
 	return s[i].Pos < s[j].Pos
 }
 
+type MatchResult struct {
+	Template     *Template
+	Score        float64
+	ExtraWords   []string
+	MissingWords []string
+}
+
+func sortAndReturnWords(words []Word) []string {
+	sort.Sort(sortedWords(words))
+	tokens := []string{}
+	for _, w := range words {
+		tokens = append(tokens, w.Text)
+	}
+	return tokens
+}
+
 // matchTemplates returns the best license template matching supplied data,
 // its score between 0 and 1 and the list of words appearing in license but not
 // in the matched template.
-func matchTemplates(license []byte, templates []*Template) (*Template, float64, []string) {
+func matchTemplates(license []byte, templates []*Template) MatchResult {
 	bestScore := float64(-1)
 	var bestTemplate *Template
-	bestUnmatchedWords := []Word{}
+	bestExtra := []Word{}
+	bestMissing := []Word{}
 	words := makeWordSet(license)
 	for _, t := range templates {
-		unmatched := []Word{}
+		extra := []Word{}
+		missing := []Word{}
 		common := 0
 		for w, pos := range words {
 			_, ok := t.Words[w]
 			if ok {
 				common++
 			} else {
-				unmatched = append(unmatched, Word{
+				extra = append(extra, Word{
+					Text: w,
+					Pos:  pos,
+				})
+			}
+		}
+		for w, pos := range t.Words {
+			if _, ok := words[w]; !ok {
+				missing = append(missing, Word{
 					Text: w,
 					Pos:  pos,
 				})
@@ -139,15 +165,16 @@ func matchTemplates(license []byte, templates []*Template) (*Template, float64, 
 		if score > bestScore {
 			bestScore = score
 			bestTemplate = t
-			bestUnmatchedWords = unmatched
+			bestMissing = missing
+			bestExtra = extra
 		}
 	}
-	bestUnmatched := []string{}
-	sort.Sort(sortedWords(bestUnmatchedWords))
-	for _, w := range bestUnmatchedWords {
-		bestUnmatched = append(bestUnmatched, w.Text)
+	return MatchResult{
+		Template:     bestTemplate,
+		Score:        bestScore,
+		ExtraWords:   sortAndReturnWords(bestExtra),
+		MissingWords: sortAndReturnWords(bestMissing),
 	}
-	return bestTemplate, bestScore, bestUnmatched
 }
 
 // fixEnv returns a copy of the process environment where GOPATH is adjusted to
@@ -327,12 +354,13 @@ func findLicense(info *PkgInfo) (string, error) {
 }
 
 type License struct {
-	Package   string
-	Score     float64
-	Template  *Template
-	Path      string
-	Err       string
-	Unmatched []string
+	Package      string
+	Score        float64
+	Template     *Template
+	Path         string
+	Err          string
+	ExtraWords   []string
+	MissingWords []string
 }
 
 func listLicenses(gopath, pkg string) ([]License, error) {
@@ -363,12 +391,7 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 
 	// Cache matched licenses by path. Useful for package with a lot of
 	// subpackages like bleve.
-	type Match struct {
-		t         *Template
-		score     float64
-		unmatched []string
-	}
-	matched := map[string]Match{}
+	matched := map[string]MatchResult{}
 
 	licenses := []License{}
 	for _, info := range infos {
@@ -398,17 +421,13 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 				if err != nil {
 					return nil, err
 				}
-				t, score, unmatched := matchTemplates(data, templates)
-				m = Match{
-					t:         t,
-					score:     score,
-					unmatched: unmatched,
-				}
+				m = matchTemplates(data, templates)
 				matched[fpath] = m
 			}
-			license.Score = m.score
-			license.Template = m.t
-			license.Unmatched = m.unmatched
+			license.Score = m.Score
+			license.Template = m.Template
+			license.ExtraWords = m.ExtraWords
+			license.MissingWords = m.MissingWords
 		}
 		licenses = append(licenses, license)
 	}
@@ -538,8 +557,11 @@ displayed. It helps assessing the changes importance.
 				license = fmt.Sprintf("%s", l.Template.Title)
 			} else if l.Score >= confidence {
 				license = fmt.Sprintf("%s (%2d%%)", l.Template.Title, int(100*l.Score))
-				if *words {
-					license += "\n\tunmatched words: " + strings.Join(l.Unmatched, ", ")
+				if *words && len(l.ExtraWords) > 0 {
+					license += "\n\t+words: " + strings.Join(l.ExtraWords, ", ")
+				}
+				if *words && len(l.MissingWords) > 0 {
+					license += "\n\t-words: " + strings.Join(l.MissingWords, ", ")
 				}
 			} else {
 				license = fmt.Sprintf("? (%s, %2d%%)", l.Template.Title, int(100*l.Score))
