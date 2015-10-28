@@ -8,9 +8,9 @@ well-known templates.
 
 ```
 $ licenses github.com/blevesearch/bleve
-github.com/blevesearch/bleve             Apache License 2.0 (100%)
+github.com/blevesearch/bleve             Apache License 2.0
 github.com/blevesearch/go-porterstemmer  MIT License (93%)
-github.com/blevesearch/segment           Apache License 2.0 (100%)
+github.com/blevesearch/segment           Apache License 2.0
 github.com/boltdb/bolt                   MIT License (97%)
 github.com/golang/protobuf/proto         BSD 3-clause "New" or "Revised" License (91%)
 github.com/steveyen/gtreap               MIT License (96%)

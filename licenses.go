@@ -466,7 +466,9 @@ license files.
 	for _, l := range licenses {
 		license := "?"
 		if l.Template != nil {
-			if l.Score >= confidence {
+			if l.Score > .99 {
+				license = fmt.Sprintf("%s", l.Template.Title)
+			} else if l.Score >= confidence {
 				license = fmt.Sprintf("%s (%2d%%)", l.Template.Title, int(100*l.Score))
 			} else {
 				license = fmt.Sprintf("? (%s, %2d%%)", l.Template.Title, int(100*l.Score))
