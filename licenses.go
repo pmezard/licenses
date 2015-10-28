@@ -69,13 +69,18 @@ func loadTemplates() ([]*Template, error) {
 var (
 	reWords     = regexp.MustCompile(`[\w']+`)
 	reCopyright = regexp.MustCompile(
-		`\s*Copyright (?:©|\(c\)|\xC2\xA9)? ?(?:\d{4}|\[year\]).*?\s*`)
+		`(?i)\s*Copyright (?:©|\(c\)|\xC2\xA9)?\s*(?:\d{4}|\[year\]).*`)
 )
+
+func cleanLicenseData(data []byte) []byte {
+	data = bytes.ToLower(data)
+	data = reCopyright.ReplaceAll(data, nil)
+	return data
+}
 
 func makeWordSet(data []byte) map[string]int {
 	words := map[string]int{}
-	data = bytes.ToLower(data)
-	data = reCopyright.ReplaceAll(data, nil)
+	data = cleanLicenseData(data)
 	matches := reWords.FindAll(data, -1)
 	for i, m := range matches {
 		s := string(m)

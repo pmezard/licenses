@@ -67,7 +67,7 @@ func compareTestLicenses(pkg string, wanted []testResult) error {
 
 func TestNoDependencies(t *testing.T) {
 	err := compareTestLicenses("colors/red", []testResult{
-		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/red", License: "MIT License", Score: 98},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestNoLicense(t *testing.T) {
 func TestMainWithDependencies(t *testing.T) {
 	// It also tests license retrieval in parent directory.
 	err := compareTestLicenses("colors/cmd/paint", []testResult{
-		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/red", License: "MIT License", Score: 98},
 		{Package: "colors/cmd/paint", License: "Academic Free License v3.0", Score: 100},
 	})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestMainWithDependencies(t *testing.T) {
 
 func TestMainWithAliasedDependencies(t *testing.T) {
 	err := compareTestLicenses("colors/cmd/mix", []testResult{
-		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/red", License: "MIT License", Score: 98},
 		{Package: "couleurs/red", License: "GNU Lesser General Public License v2.1",
 			Score: 100},
 		{Package: "colors/cmd/mix", License: "Academic Free License v3.0", Score: 100},
@@ -147,7 +147,7 @@ func TestNoBuildableGoSourceFiles(t *testing.T) {
 func TestBroken(t *testing.T) {
 	err := compareTestLicenses("colors/broken", []testResult{
 		{Package: "colors/missing", License: "", Score: 0, Err: "some error"},
-		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/red", License: "MIT License", Score: 98},
 		{Package: "colors/broken", License: "GNU General Public License v3.0", Score: 100},
 	})
 	if err != nil {
@@ -159,10 +159,25 @@ func TestBrokenDependency(t *testing.T) {
 	err := compareTestLicenses("colors/purple", []testResult{
 		{Package: "colors/broken", License: "GNU General Public License v3.0", Score: 100},
 		{Package: "colors/missing", License: "", Score: 0, Err: "some error"},
-		{Package: "colors/red", License: "MIT License", Score: 95},
+		{Package: "colors/red", License: "MIT License", Score: 98},
 		{Package: "colors/purple", License: "", Score: 0},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCleanLicenseData(t *testing.T) {
+	data := `The MIT License (MIT)
+
+	Copyright (c) 2013 Ben Johnson
+	
+	Some other lines.
+	And more.
+	`
+	cleaned := string(cleanLicenseData([]byte(data)))
+	wanted := "the mit license (mit)\n\t\n\tsome other lines.\n\tand more.\n\t"
+	if wanted != cleaned {
+		t.Fatalf("license data mismatch: %q\n!=\n%q", cleaned, wanted)
 	}
 }
