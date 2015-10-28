@@ -136,11 +136,13 @@ func listDependencies(gopath, pkg string) ([]string, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		if strings.Contains(string(out), "cannot find package") {
-			return nil, &MissingError{Err: string(out)}
+		output := string(out)
+		if strings.Contains(output, "cannot find package") ||
+			strings.Contains(output, "no buildable Go source files") {
+			return nil, &MissingError{Err: output}
 		}
 		return nil, fmt.Errorf("'go list -f %s %s' failed with:\n%s",
-			templ, pkg, string(out))
+			templ, pkg, output)
 	}
 	deps := []string{}
 	for _, s := range strings.Split(string(out), "|") {

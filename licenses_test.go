@@ -126,3 +126,13 @@ func TestMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNoBuildableGoSourceFiles(t *testing.T) {
+	_, err := listTestLicenses("colors/cmd")
+	if err == nil {
+		t.Fatal("no error on missing package")
+	}
+	if _, ok := err.(*MissingError); !ok {
+		t.Fatalf("MissingError expected")
+	}
+}
