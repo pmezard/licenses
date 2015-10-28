@@ -202,9 +202,10 @@ func (err *MissingError) Error() string {
 	return err.Err
 }
 
-func listDependencies(gopath, pkg string) ([]string, error) {
-	templ := "{{range .Deps}}{{.}}|{{end}}"
-	cmd := exec.Command("go", "list", "-f", templ, pkg)
+func listPackagesAndDeps(gopath string, pkgs []string) ([]string, error) {
+	args := []string{"list", "-f", "{{range .Deps}}{{.}}|{{end}}"}
+	args = append(args, pkgs...)
+	cmd := exec.Command("go", args...)
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -213,14 +214,22 @@ func listDependencies(gopath, pkg string) ([]string, error) {
 			strings.Contains(output, "no buildable Go source files") {
 			return nil, &MissingError{Err: output}
 		}
-		return nil, fmt.Errorf("'go list -f %s %s' failed with:\n%s",
-			templ, pkg, output)
+		return nil, fmt.Errorf("'go %s' failed with:\n%s",
+			strings.Join(args, " "), output)
 	}
 	deps := []string{}
+	seen := map[string]bool{}
 	for _, s := range strings.Split(string(out), "|") {
 		s = strings.TrimSpace(s)
-		if s != "" {
+		if s != "" && !seen[s] {
 			deps = append(deps, s)
+			seen[s] = true
+		}
+	}
+	for _, pkg := range pkgs {
+		if !seen[pkg] {
+			seen[pkg] = true
+			deps = append(deps, pkg)
 		}
 	}
 	sort.Strings(deps)
@@ -363,19 +372,19 @@ type License struct {
 	MissingWords []string
 }
 
-func listLicenses(gopath, pkg string) ([]License, error) {
+func listLicenses(gopath string, pkgs []string) ([]License, error) {
 	templates, err := loadTemplates()
 	if err != nil {
 		return nil, err
 	}
-	deps, err := listDependencies(gopath, pkg)
+	deps, err := listPackagesAndDeps(gopath, pkgs)
 	if err != nil {
 		if _, ok := err.(*MissingError); ok {
 			return nil, err
 		}
-		return nil, fmt.Errorf("could not list %s dependencies: %s", pkg, err)
+		return nil, fmt.Errorf("could not list %s dependencies: %s",
+			strings.Join(pkgs, " "), err)
 	}
-	deps = append(deps, pkg)
 	std, err := listStandardPackages(gopath)
 	if err != nil {
 		return nil, fmt.Errorf("could not list standard packages: %s", err)
@@ -514,9 +523,9 @@ func groupLicenses(licenses []License) ([]License, error) {
 
 func printLicenses() error {
 	flag.Usage = func() {
-		fmt.Println(`Usage: licenses IMPORTPATH
+		fmt.Println(`Usage: licenses IMPORTPATH...
 
-licenses lists all dependencies of specified package or command, excluding
+licenses lists all dependencies of specified packages or commands, excluding
 standard library packages, and prints their licenses. Licenses are detected by
 looking for files named like LICENSE, COPYING, COPYRIGHT and other variants in
 the package directory, and its parent directories until one is found. Files
@@ -533,13 +542,13 @@ displayed. It helps assessing the changes importance.
 	all := flag.Bool("a", false, "display all individual packages")
 	words := flag.Bool("w", false, "display words not matching license template")
 	flag.Parse()
-	if flag.NArg() != 1 {
-		return fmt.Errorf("expect a single package argument, got %d", flag.NArg())
+	if flag.NArg() < 1 {
+		return fmt.Errorf("expect at least one package argument")
 	}
-	pkg := flag.Arg(0)
+	pkgs := flag.Args()
 
 	confidence := 0.9
-	licenses, err := listLicenses("", pkg)
+	licenses, err := listLicenses("", pkgs)
 	if err != nil {
 		return err
 	}
