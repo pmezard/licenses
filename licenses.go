@@ -21,7 +21,7 @@ import (
 type Template struct {
 	Title    string
 	Nickname string
-	Words    map[string]bool
+	Words    map[string]int
 }
 
 func parseTemplate(content string) (*Template, error) {
@@ -72,37 +72,77 @@ var (
 		`\s*Copyright (?:©|\(c\)|\xC2\xA9)? ?(?:\d{4}|\[year\]).*?\s*`)
 )
 
-func makeWordSet(data []byte) map[string]bool {
-	words := map[string]bool{}
+func makeWordSet(data []byte) map[string]int {
+	words := map[string]int{}
 	data = bytes.ToLower(data)
 	data = reCopyright.ReplaceAll(data, nil)
 	matches := reWords.FindAll(data, -1)
-	for _, m := range matches {
-		words[string(m)] = true
+	for i, m := range matches {
+		s := string(m)
+		if _, ok := words[s]; !ok {
+			// Non-matching words are likely in the license header, to mention
+			// copyrights and authors. Try to preserve the initial sequences,
+			// to display them later.
+			words[s] = i
+		}
 	}
 	return words
 }
 
-// matchTemplates returns the best license template matching supplied data, and
-// its score between 0 and 1.
-func matchTemplates(license []byte, templates []*Template) (*Template, float64) {
+type Word struct {
+	Text string
+	Pos  int
+}
+
+type sortedWords []Word
+
+func (s sortedWords) Len() int {
+	return len(s)
+}
+
+func (s sortedWords) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s sortedWords) Less(i, j int) bool {
+	return s[i].Pos < s[j].Pos
+}
+
+// matchTemplates returns the best license template matching supplied data,
+// its score between 0 and 1 and the list of words appearing in license but not
+// in the matched template.
+func matchTemplates(license []byte, templates []*Template) (*Template, float64, []string) {
 	bestScore := float64(-1)
 	var bestTemplate *Template
+	bestUnmatchedWords := []Word{}
 	words := makeWordSet(license)
 	for _, t := range templates {
+		unmatched := []Word{}
 		common := 0
-		for w := range words {
-			if _, ok := t.Words[w]; ok {
+		for w, pos := range words {
+			_, ok := t.Words[w]
+			if ok {
 				common++
+			} else {
+				unmatched = append(unmatched, Word{
+					Text: w,
+					Pos:  pos,
+				})
 			}
 		}
 		score := 2 * float64(common) / (float64(len(words)) + float64(len(t.Words)))
 		if score > bestScore {
 			bestScore = score
 			bestTemplate = t
+			bestUnmatchedWords = unmatched
 		}
 	}
-	return bestTemplate, bestScore
+	bestUnmatched := []string{}
+	sort.Sort(sortedWords(bestUnmatchedWords))
+	for _, w := range bestUnmatchedWords {
+		bestUnmatched = append(bestUnmatched, w.Text)
+	}
+	return bestTemplate, bestScore, bestUnmatched
 }
 
 // fixEnv returns a copy of the process environment where GOPATH is adjusted to
@@ -282,11 +322,12 @@ func findLicense(info *PkgInfo) (string, error) {
 }
 
 type License struct {
-	Package  string
-	Score    float64
-	Template *Template
-	Path     string
-	Err      string
+	Package   string
+	Score     float64
+	Template  *Template
+	Path      string
+	Err       string
+	Unmatched []string
 }
 
 func listLicenses(gopath, pkg string) ([]License, error) {
@@ -318,8 +359,9 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 	// Cache matched licenses by path. Useful for package with a lot of
 	// subpackages like bleve.
 	type Match struct {
-		t     *Template
-		score float64
+		t         *Template
+		score     float64
+		unmatched []string
 	}
 	matched := map[string]Match{}
 
@@ -351,15 +393,17 @@ func listLicenses(gopath, pkg string) ([]License, error) {
 				if err != nil {
 					return nil, err
 				}
-				t, score := matchTemplates(data, templates)
+				t, score, unmatched := matchTemplates(data, templates)
 				m = Match{
-					t:     t,
-					score: score,
+					t:         t,
+					score:     score,
+					unmatched: unmatched,
 				}
 				matched[fpath] = m
 			}
 			license.Score = m.score
 			license.Template = m.t
+			license.Unmatched = m.unmatched
 		}
 		licenses = append(licenses, license)
 	}
@@ -457,10 +501,13 @@ displayed along with its score.
 
 With -a, all individual packages are displayed instead of grouping them by
 license files.
+With -w, words in package license file not found in the template license are
+displayed. It helps assessing the changes importance.
 `)
 		os.Exit(1)
 	}
 	all := flag.Bool("a", false, "display all individual packages")
+	words := flag.Bool("w", false, "display words not matching license template")
 	flag.Parse()
 	if flag.NArg() != 1 {
 		return fmt.Errorf("expect a single package argument, got %d", flag.NArg())
@@ -486,6 +533,9 @@ license files.
 				license = fmt.Sprintf("%s", l.Template.Title)
 			} else if l.Score >= confidence {
 				license = fmt.Sprintf("%s (%2d%%)", l.Template.Title, int(100*l.Score))
+				if *words {
+					license += "\n\tunmatched words: " + strings.Join(l.Unmatched, ", ")
+				}
 			} else {
 				license = fmt.Sprintf("? (%s, %2d%%)", l.Template.Title, int(100*l.Score))
 			}
