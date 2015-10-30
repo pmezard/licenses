@@ -205,3 +205,10 @@ func TestCleanLicenseData(t *testing.T) {
 		t.Fatalf("license data mismatch: %q\n!=\n%q", cleaned, wanted)
 	}
 }
+
+func TestStandardPackages(t *testing.T) {
+	err := compareTestLicenses([]string{"encoding/json", "cmd/addr2line"}, []testResult{})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

@@ -269,7 +269,7 @@ func listPackagesAndDeps(gopath string, pkgs []string) ([]string, error) {
 }
 
 func listStandardPackages(gopath string) ([]string, error) {
-	return expandPackages(gopath, []string{"std"})
+	return expandPackages(gopath, []string{"std", "cmd"})
 }
 
 type PkgError struct {
