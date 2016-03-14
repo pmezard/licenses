@@ -317,13 +317,6 @@ func getPackagesInfo(gopath string, pkgs []string) ([]*PkgInfo, error) {
 }
 
 var (
-	licenseFiles = []string{
-		"LICENSE",
-		"LICENSE.txt",
-		"LICENSE.md",
-		"COPYING",
-		"COPYRIGHT",
-	}
 	reLicense = regexp.MustCompile(`(?i)^(?:` +
 		`((?:un)?licen[sc]e)|` +
 		`((?:un)?licen[sc]e\.(?:md|markdown|txt))|` +
