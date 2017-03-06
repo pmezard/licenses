@@ -7,13 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/pmezard/licenses/assets"
 )
@@ -533,75 +533,89 @@ func groupLicenses(licenses []License) ([]License, error) {
 	return kept, nil
 }
 
-func printLicenses() error {
-	flag.Usage = func() {
-		fmt.Println(`Usage: licenses IMPORTPATH...
+type projectAndLicense struct {
+	Project    string  `json:"project"`
+	License    string  `json:"license,omitempty"`
+	Confidence float64 `json:"confidence,omitempty"`
+	Error      string  `json:"error,omitempty"`
+}
 
-licenses lists all dependencies of specified packages or commands, excluding
-standard library packages, and prints their licenses. Licenses are detected by
-looking for files named like LICENSE, COPYING, COPYRIGHT and other variants in
-the package directory, and its parent directories until one is found. Files
-content is matched against a set of well-known licenses and the best match is
-displayed along with its score.
-
-With -a, all individual packages are displayed instead of grouping them by
-license files.
-With -w, words in package license file not found in the template license are
-displayed. It helps assessing the changes importance.
-`)
-		os.Exit(1)
-	}
-	all := flag.Bool("a", false, "display all individual packages")
-	words := flag.Bool("w", false, "display words not matching license template")
-	flag.Parse()
-	if flag.NArg() < 1 {
-		return fmt.Errorf("expect at least one package argument")
-	}
-	pkgs := flag.Args()
-
-	confidence := 0.9
-	licenses, err := listLicenses("", pkgs)
-	if err != nil {
-		return err
-	}
-	if !*all {
-		licenses, err = groupLicenses(licenses)
-		if err != nil {
-			return err
-		}
-	}
-	w := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
+func licensesToProjectAndLicenses(licenses []License) (c []projectAndLicense, u []projectAndLicense, e []projectAndLicense) {
+	cs := 0.9
 	for _, l := range licenses {
-		license := "?"
-		if l.Template != nil {
-			if l.Score > .99 {
-				license = fmt.Sprintf("%s", l.Template.Title)
-			} else if l.Score >= confidence {
-				license = fmt.Sprintf("%s (%2d%%)", l.Template.Title, int(100*l.Score))
-				if *words && len(l.ExtraWords) > 0 {
-					license += "\n\t+words: " + strings.Join(l.ExtraWords, ", ")
-				}
-				if *words && len(l.MissingWords) > 0 {
-					license += "\n\t-words: " + strings.Join(l.MissingWords, ", ")
-				}
-			} else {
-				license = fmt.Sprintf("? (%s, %2d%%)", l.Template.Title, int(100*l.Score))
-			}
-		} else if l.Err != "" {
-			license = strings.Replace(l.Err, "\n", " ", -1)
+		if l.Err != "" {
+			e = append(e, projectAndLicense{
+				Project: removeVendor(l.Package),
+				Error:   l.Err,
+			})
+			continue
 		}
-		_, err = w.Write([]byte(l.Package + "\t" + license + "\n"))
-		if err != nil {
-			return err
+		if l.Score > cs {
+			pl := projectAndLicense{
+				Project: removeVendor(l.Package),
+				License: l.Template.Title,
+			}
+			c = append(c, pl)
+		} else {
+			pl := projectAndLicense{
+				Project:    removeVendor(l.Package),
+				License:    l.Template.Title,
+				Confidence: l.Score,
+			}
+			u = append(u, pl)
 		}
 	}
-	return w.Flush()
+	return c, u, e
+}
+
+func removeVendor(s string) string {
+	v := "/vendor/"
+	i := strings.Index(s, v)
+	if i == -1 {
+		return s
+	}
+	return s[i+len(v):]
 }
 
 func main() {
-	err := printLicenses()
+	flag.Parse()
+	if flag.NArg() < 1 {
+		log.Fatal("expect at least one package argument")
+	}
+	pkgs := flag.Args()
+
+	licenses, err := listLicenses("", pkgs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		os.Exit(1)
+		log.Fatal(err)
+	}
+	licenses, err = groupLicenses(licenses)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	c, u, e := licensesToProjectAndLicenses(licenses)
+
+	b, err := json.MarshalIndent(c, "", "	")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(b))
+
+	if len(u) != 0 {
+		fmt.Println("")
+		b, err := json.MarshalIndent(u, "", "	")
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(string(b))
+	}
+
+	if len(e) != 0 {
+		fmt.Println("")
+		b, err := json.MarshalIndent(u, "", "	")
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(string(b))
 	}
 }
