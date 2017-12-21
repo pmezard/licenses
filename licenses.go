@@ -321,7 +321,8 @@ var (
 		`((?:un)?licen[sc]e)|` +
 		`((?:un)?licen[sc]e\.(?:md|markdown|txt))|` +
 		`(copy(?:ing|right)(?:\.[^.]+)?)|` +
-		`(licen[sc]e\.[^.]+)` +
+		`(licen[sc]e\.[^.]+)|` +
+		`(.*(?:un)?licen[sc]e.*)` +
 		`)$`)
 )
 
@@ -340,6 +341,8 @@ func scoreLicenseName(name string) float64 {
 		return 0.8
 	case m[4] != "":
 		return 0.7
+	case m[5] != "":
+		return 0.6
 	}
 	return 0.
 }
