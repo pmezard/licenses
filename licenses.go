@@ -536,6 +536,136 @@ func groupLicenses(licenses []License) ([]License, error) {
 	return kept, nil
 }
 
+func generateReport(report string, licenses []License, confidence float64, words bool) error {
+	table := make([]struct{ Package, License, Match, Words string }, len(licenses))
+	for i, l := range licenses {
+		license, match, diff := "?", "", ""
+		if l.Template != nil {
+			if l.Score > .99 {
+				license = fmt.Sprintf("%s", l.Template.Title)
+				match = "99%"
+			} else if l.Score >= confidence {
+				license = fmt.Sprintf("%s", l.Template.Title)
+				match = fmt.Sprintf("%2d%%", int(100*l.Score))
+				for _, word := range l.ExtraWords {
+					diff += " +" + word
+				}
+				for _, word := range l.MissingWords {
+					diff += " -" + word
+				}
+			} else {
+				license = fmt.Sprintf("? (%s)", l.Template.Title)
+				match = fmt.Sprintf("%2d%%", int(100*l.Score))
+			}
+		} else if l.Err != "" {
+			license = strings.Replace(l.Err, "\n", " ", -1)
+		}
+		table[i].Package = l.Package
+		table[i].License = license
+		table[i].Match = match
+		table[i].Words = diff
+	}
+	sort.Slice(table, func(i int, j int) bool {
+		ii, jj := table[i], table[j]
+		if license := strings.Compare(ii.License, jj.License); license < 0 {
+			return true
+		} else if license == 0 {
+			if match := strings.Compare(ii.Match, jj.Match); match < 0 {
+				return true
+			} else if match == 0 {
+				if pack := strings.Compare(ii.Package, jj.Package); pack < 0 {
+					return true
+				}
+			}
+		}
+		return false
+	})
+
+	maxPackage, maxLicense, maxMatch, maxWords := 0, 0, 0, 0
+	for _, row := range table {
+		if width := len(row.Package); width > maxPackage {
+			maxPackage = width
+		}
+		if width := len(row.License); width > maxLicense {
+			maxLicense = width
+		}
+		if width := len(row.Match); width > maxMatch {
+			maxMatch = width
+		}
+		if width := len(row.Words); width > maxWords {
+			maxWords = width
+		}
+	}
+
+	out, err := os.Create(report)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	writeHeading := func(name string, width int) int {
+		out.WriteString(" ")
+		out.WriteString(name)
+		padding, rowWidth := width-len(name), width
+		if padding < 0 {
+			padding, rowWidth = 0, len(name)
+		}
+		for i := 0; i < padding; i++ {
+			out.WriteString(" ")
+		}
+		out.WriteString(" |")
+
+		return rowWidth
+	}
+	out.WriteString("|")
+	rowWidthPackage := writeHeading("Package", maxPackage)
+	rowWidthLicense := writeHeading("License", maxLicense)
+	rowWidthMatch := writeHeading("Match", maxMatch)
+	var rowWidthWords int
+	if words {
+		rowWidthWords = writeHeading("Words", maxWords)
+	}
+	out.WriteString("\n")
+
+	writeSep := func(width int) {
+		out.WriteString(" ")
+		for i := 0; i < width; i++ {
+			out.WriteString("-")
+		}
+		out.WriteString(" |")
+	}
+	out.WriteString("|")
+	writeSep(rowWidthPackage)
+	writeSep(rowWidthLicense)
+	writeSep(rowWidthMatch)
+	if words {
+		writeSep(rowWidthWords)
+	}
+	out.WriteString("\n")
+
+	writeRow := func(data string, width int) {
+		out.WriteString(" ")
+		out.WriteString(data)
+		padding := width - len(data)
+		for i := 0; i < padding; i++ {
+			out.WriteString(" ")
+		}
+		out.WriteString(" |")
+	}
+	for _, row := range table {
+		out.WriteString("|")
+		writeRow(row.Package, rowWidthPackage)
+		writeRow(row.License, rowWidthLicense)
+		writeRow(row.Match, rowWidthMatch)
+		if words {
+			writeRow(row.Words, rowWidthWords)
+		}
+		out.WriteString("\n")
+	}
+
+	return nil
+}
+
 func printLicenses() error {
 	flag.Usage = func() {
 		fmt.Println(`Usage: licenses IMPORTPATH...
@@ -551,11 +681,13 @@ With -a, all individual packages are displayed instead of grouping them by
 license files.
 With -w, words in package license file not found in the template license are
 displayed. It helps assessing the changes importance.
+With -r, a report is generated and saved in the specified file.
 `)
 		os.Exit(1)
 	}
 	all := flag.Bool("a", false, "display all individual packages")
 	words := flag.Bool("w", false, "display words not matching license template")
+	report := flag.String("r", "", "generate a report file")
 	flag.Parse()
 	if flag.NArg() < 1 {
 		return fmt.Errorf("expect at least one package argument")
@@ -573,6 +705,11 @@ displayed. It helps assessing the changes importance.
 			return err
 		}
 	}
+
+	if *report != "" {
+		return generateReport(*report, licenses, confidence, *words)
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
 	for _, l := range licenses {
 		license := "?"
