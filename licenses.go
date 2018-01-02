@@ -537,16 +537,17 @@ func groupLicenses(licenses []License) ([]License, error) {
 }
 
 func generateReport(report string, licenses []License, confidence float64, words bool) error {
-	table := make([]struct{ Package, License, Match, Words string }, len(licenses))
+	table := make([]struct {
+		Package, License, Match, Words string
+		Score                          float64
+	}, len(licenses))
 	for i, l := range licenses {
-		license, match, diff := "?", "", ""
+		license, diff := "?", ""
 		if l.Template != nil {
 			if l.Score > .99 {
 				license = fmt.Sprintf("%s", l.Template.Title)
-				match = "99%"
 			} else if l.Score >= confidence {
 				license = fmt.Sprintf("%s", l.Template.Title)
-				match = fmt.Sprintf("%2d%%", int(100*l.Score))
 				for _, word := range l.ExtraWords {
 					diff += " +" + word
 				}
@@ -555,24 +556,24 @@ func generateReport(report string, licenses []License, confidence float64, words
 				}
 			} else {
 				license = fmt.Sprintf("? (%s)", l.Template.Title)
-				match = fmt.Sprintf("%2d%%", int(100*l.Score))
 			}
 		} else if l.Err != "" {
 			license = strings.Replace(l.Err, "\n", " ", -1)
 		}
 		table[i].Package = l.Package
 		table[i].License = license
-		table[i].Match = match
+		table[i].Match = fmt.Sprintf("%2d%%", int(100*l.Score+.5))
 		table[i].Words = diff
+		table[i].Score = l.Score
 	}
 	sort.Slice(table, func(i int, j int) bool {
 		ii, jj := table[i], table[j]
 		if license := strings.Compare(ii.License, jj.License); license < 0 {
 			return true
 		} else if license == 0 {
-			if match := strings.Compare(ii.Match, jj.Match); match < 0 {
+			if ii.Match < jj.Match {
 				return true
-			} else if match == 0 {
+			} else if ii.Match == jj.Match {
 				if pack := strings.Compare(ii.Package, jj.Package); pack < 0 {
 					return true
 				}
