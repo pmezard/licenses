@@ -214,7 +214,8 @@ func expandPackages(gopath string, pkgs []string) ([]string, error) {
 	if err != nil {
 		output := string(out)
 		if strings.Contains(output, "cannot find package") ||
-			strings.Contains(output, "no buildable Go source files") {
+			strings.Contains(output, "no buildable Go source files") ||
+			strings.Contains(output, "can't load package") {
 			return nil, &MissingError{Err: output}
 		}
 		return nil, fmt.Errorf("'go %s' failed with:\n%s",
@@ -243,7 +244,8 @@ func listPackagesAndDeps(gopath string, pkgs []string) ([]string, error) {
 	if err != nil {
 		output := string(out)
 		if strings.Contains(output, "cannot find package") ||
-			strings.Contains(output, "no buildable Go source files") {
+			strings.Contains(output, "no buildable Go source files") ||
+			strings.Contains(output, "can't load package") {
 			return nil, &MissingError{Err: output}
 		}
 		return nil, fmt.Errorf("'go %s' failed with:\n%s",
