@@ -538,11 +538,39 @@ func groupLicenses(licenses []License) ([]License, error) {
 	return kept, nil
 }
 
+type Row struct {
+	Package, License, Match, Words string
+	Score                          float64
+}
+
+type Rows []Row
+
+func (r Rows) Len() int {
+	return len(r)
+}
+
+func (r Rows) Less(i, j int) bool {
+	ii, jj := r[i], r[j]
+	if license := strings.Compare(ii.License, jj.License); license < 0 {
+		return true
+	} else if license == 0 {
+		if ii.Score < jj.Score {
+			return true
+		} else if ii.Score == jj.Score {
+			if pack := strings.Compare(ii.Package, jj.Package); pack < 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r Rows) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
 func generateReport(report string, licenses []License, confidence float64, words bool) error {
-	table := make([]struct {
-		Package, License, Match, Words string
-		Score                          float64
-	}, len(licenses))
+	table := make(Rows, len(licenses))
 	for i, l := range licenses {
 		license, diff := "?", ""
 		if l.Template != nil {
@@ -568,21 +596,7 @@ func generateReport(report string, licenses []License, confidence float64, words
 		table[i].Words = diff
 		table[i].Score = l.Score
 	}
-	sort.Slice(table, func(i int, j int) bool {
-		ii, jj := table[i], table[j]
-		if license := strings.Compare(ii.License, jj.License); license < 0 {
-			return true
-		} else if license == 0 {
-			if ii.Match < jj.Match {
-				return true
-			} else if ii.Match == jj.Match {
-				if pack := strings.Compare(ii.Package, jj.Package); pack < 0 {
-					return true
-				}
-			}
-		}
-		return false
-	})
+	sort.Sort(table)
 
 	maxPackage, maxLicense, maxMatch, maxWords := 0, 0, 0, 0
 	for _, row := range table {
@@ -684,8 +698,7 @@ With -a, all individual packages are displayed instead of grouping them by
 license files.
 With -w, words in package license file not found in the template license are
 displayed. It helps assessing the changes importance.
-With -r, a report is generated and saved in the specified file.
-`)
+With -r, a report is generated and saved in the specified file.`)
 		os.Exit(1)
 	}
 	all := flag.Bool("a", false, "display all individual packages")
