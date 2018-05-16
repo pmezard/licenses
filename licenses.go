@@ -214,7 +214,8 @@ func expandPackages(gopath string, pkgs []string) ([]string, error) {
 	if err != nil {
 		output := string(out)
 		if strings.Contains(output, "cannot find package") ||
-			strings.Contains(output, "no buildable Go source files") {
+			strings.Contains(output, "no buildable Go source files") ||
+			strings.Contains(output, "cmd: no Go files in") {
 			return nil, &MissingError{Err: output}
 		}
 		return nil, fmt.Errorf("'go %s' failed with:\n%s",
@@ -547,8 +548,7 @@ displayed along with its score.
 With -a, all individual packages are displayed instead of grouping them by
 license files.
 With -w, words in package license file not found in the template license are
-displayed. It helps assessing the changes importance.
-`)
+displayed. It helps assessing the changes importance.`)
 		os.Exit(1)
 	}
 	all := flag.Bool("a", false, "display all individual packages")
