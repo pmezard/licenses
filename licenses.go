@@ -322,7 +322,7 @@ var (
 		`((?:un)?licen[sc]e)|` +
 		`((?:un)?licen[sc]e\.(?:md|markdown|txt))|` +
 		`(copy(?:ing|right)(?:\.[^.]+)?)|` +
-		`(licen[sc]e\.[^.]+)` +
+		`(licen[sc]e(?:[-_\d\.]+)?\.[^.]+)` +
 		`)$`)
 )
 

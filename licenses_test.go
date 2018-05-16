@@ -212,3 +212,28 @@ func TestStandardPackages(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestStandardLicenceFileNames(t *testing.T) {
+	data := []struct {
+		name  string
+		score float64
+	}{
+		{"any-file.go", 0.0},
+		{"LICENCE", 1.0},
+		{"LICENCE-2.0", 0.7},
+		{"LICENCE-2.0.txt", 0.7},
+		{"LICENCE_4.2.txt", 0.7},
+		{"copying", 0.8},
+		{"copyright", 0.8},
+		{"copyleft", 0.0},
+		{"licence", 1.0},
+		{"license", 1.0},
+	}
+
+	for _, data := range data {
+		actual := scoreLicenseName(data.name)
+		if actual != data.score {
+			t.Errorf("For name %q, expected %f got %f", data.name, data.score, actual)
+		}
+	}
+}
