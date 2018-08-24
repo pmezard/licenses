@@ -24,6 +24,13 @@ github.com/steveyen/gtreap  MIT License (98%)
                             -words: mit, license
 ```
 
+# Installation
+
+```
+$ go get github.com/pmezard/licenses
+$ go build
+```
+
 # Where does it come from?
 
 Both the code and reference data were directly ported from:
