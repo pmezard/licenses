@@ -204,6 +204,8 @@ func (err *MissingError) Error() string {
 	return err.Err
 }
 
+var missingRE = regexp.MustCompile(`cannot find package|no buildable Go source files|no Go files in`)
+
 // expandPackages takes a list of package or package expressions and invoke go
 // list to expand them to packages. In particular, it handles things like "..."
 // and ".".
@@ -214,13 +216,11 @@ func expandPackages(gopath string, pkgs []string) ([]string, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		output := string(out)
-		if strings.Contains(output, "cannot find package") ||
-			strings.Contains(output, "no buildable Go source files") {
-			return nil, &MissingError{Err: output}
+		if missingRE.Match(out) {
+			return nil, &MissingError{Err: string(out)}
 		}
 		return nil, fmt.Errorf("'go %s' failed with:\n%s",
-			strings.Join(args, " "), output)
+			strings.Join(args, " "), out)
 	}
 	names := []string{}
 	for _, s := range strings.Split(string(out), "\n") {
@@ -243,13 +243,11 @@ func listPackagesAndDeps(gopath string, pkgs []string) ([]string, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		output := string(out)
-		if strings.Contains(output, "cannot find package") ||
-			strings.Contains(output, "no buildable Go source files") {
-			return nil, &MissingError{Err: output}
+		if missingRE.Match(out) {
+			return nil, &MissingError{Err: string(out)}
 		}
 		return nil, fmt.Errorf("'go %s' failed with:\n%s",
-			strings.Join(args, " "), output)
+			strings.Join(args, " "), out)
 	}
 	deps := []string{}
 	seen := map[string]bool{}
@@ -535,9 +533,7 @@ func groupLicenses(licenses []License) ([]License, error) {
 	return kept, nil
 }
 
-func printLicenses() error {
-	flag.Usage = func() {
-		fmt.Println(`Usage: licenses IMPORTPATH...
+const usage = `Usage: licenses IMPORTPATH...
 
 licenses lists all dependencies of specified packages or commands, excluding
 standard library packages, and prints their licenses. Licenses are detected by
@@ -549,8 +545,11 @@ displayed along with its score.
 With -a, all individual packages are displayed instead of grouping them by
 license files.
 With -w, words in package license file not found in the template license are
-displayed. It helps assessing the changes importance.
-`)
+displayed. It helps assessing the changes importance.`
+
+func printLicenses() error {
+	flag.Usage = func() {
+		fmt.Println(usage)
 		os.Exit(1)
 	}
 	all := flag.Bool("a", false, "display all individual packages")
