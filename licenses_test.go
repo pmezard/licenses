@@ -25,7 +25,7 @@ func listTestLicenses(pkgs []string) ([]testResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := []testResult{}
+	var res []testResult
 	for _, l := range licenses {
 		r := testResult{
 			Package: l.Package,
