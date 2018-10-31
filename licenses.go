@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -19,9 +21,9 @@ import (
 )
 
 type Template struct {
-	Title    string
-	Nickname string
-	Words    map[string]int
+	Title    string         `json:"title"`
+	Nickname string         `json:"nickname,omitempty"`
+	Words    map[string]int `json:"-"`
 }
 
 func parseTemplate(content string) (*Template, error) {
@@ -202,6 +204,8 @@ func (err *MissingError) Error() string {
 	return err.Err
 }
 
+var missingRE = regexp.MustCompile(`cannot find package|no buildable Go source files|no Go files in`)
+
 // expandPackages takes a list of package or package expressions and invoke go
 // list to expand them to packages. In particular, it handles things like "..."
 // and ".".
@@ -212,13 +216,11 @@ func expandPackages(gopath string, pkgs []string) ([]string, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		output := string(out)
-		if strings.Contains(output, "cannot find package") ||
-			strings.Contains(output, "no buildable Go source files") {
-			return nil, &MissingError{Err: output}
+		if missingRE.Match(out) {
+			return nil, &MissingError{Err: string(out)}
 		}
 		return nil, fmt.Errorf("'go %s' failed with:\n%s",
-			strings.Join(args, " "), output)
+			strings.Join(args, " "), out)
 	}
 	names := []string{}
 	for _, s := range strings.Split(string(out), "\n") {
@@ -241,13 +243,11 @@ func listPackagesAndDeps(gopath string, pkgs []string) ([]string, error) {
 	cmd.Env = fixEnv(gopath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		output := string(out)
-		if strings.Contains(output, "cannot find package") ||
-			strings.Contains(output, "no buildable Go source files") {
-			return nil, &MissingError{Err: output}
+		if missingRE.Match(out) {
+			return nil, &MissingError{Err: string(out)}
 		}
 		return nil, fmt.Errorf("'go %s' failed with:\n%s",
-			strings.Join(args, " "), output)
+			strings.Join(args, " "), out)
 	}
 	deps := []string{}
 	seen := map[string]bool{}
@@ -300,7 +300,7 @@ func getPackagesInfo(gopath string, pkgs []string) ([]*PkgInfo, error) {
 	decoder := json.NewDecoder(bytes.NewBuffer(out))
 	for _, pkg := range pkgs {
 		info := &PkgInfo{}
-		err := decoder.Decode(info)
+		err = decoder.Decode(info)
 		if err != nil {
 			return nil, fmt.Errorf("could not retrieve package information for %s", pkg)
 		}
@@ -375,13 +375,13 @@ func findLicense(info *PkgInfo) (string, error) {
 }
 
 type License struct {
-	Package      string
-	Score        float64
-	Template     *Template
-	Path         string
-	Err          string
-	ExtraWords   []string
-	MissingWords []string
+	Package      string    `json:"package"`
+	Score        float64   `json:"score"`
+	Template     *Template `json:"license,omitempty"`
+	Path         string    `json:"path,omitempty"`
+	Err          string    `json:"error,omitempty"`
+	ExtraWords   []string  `json:"extra_words,omitempty"`
+	MissingWords []string  `json:"missing_words,omitempty"`
 }
 
 func listLicenses(gopath string, pkgs []string) ([]License, error) {
@@ -414,7 +414,7 @@ func listLicenses(gopath string, pkgs []string) ([]License, error) {
 	// subpackages like bleve.
 	matched := map[string]MatchResult{}
 
-	licenses := []License{}
+	licenses := make([]License, 0, len(infos))
 	for _, info := range infos {
 		if info.Error != nil {
 			licenses = append(licenses, License{
@@ -533,9 +533,7 @@ func groupLicenses(licenses []License) ([]License, error) {
 	return kept, nil
 }
 
-func printLicenses() error {
-	flag.Usage = func() {
-		fmt.Println(`Usage: licenses IMPORTPATH...
+const usage = `Usage: licenses IMPORTPATH...
 
 licenses lists all dependencies of specified packages or commands, excluding
 standard library packages, and prints their licenses. Licenses are detected by
@@ -547,19 +545,35 @@ displayed along with its score.
 With -a, all individual packages are displayed instead of grouping them by
 license files.
 With -w, words in package license file not found in the template license are
-displayed. It helps assessing the changes importance.
-`)
+displayed. It helps assessing the changes importance.`
+
+func printLicenses() error {
+	flag.Usage = func() {
+		fmt.Println(usage)
 		os.Exit(1)
 	}
 	all := flag.Bool("a", false, "display all individual packages")
 	words := flag.Bool("w", false, "display words not matching license template")
+	format := flag.String("f", "text", "output format (one of text, json, csv)")
 	flag.Parse()
+
+	var formatter formatFunc
+	switch *format {
+	default:
+		return fmt.Errorf("unrecognized output format: %s", *format)
+	case "text":
+		formatter = formatText
+	case "json":
+		formatter = formatJSON
+	case "csv":
+		formatter = formatCSV
+	}
+
 	if flag.NArg() < 1 {
 		return fmt.Errorf("expect at least one package argument")
 	}
 	pkgs := flag.Args()
 
-	confidence := 0.9
 	licenses, err := listLicenses("", pkgs)
 	if err != nil {
 		return err
@@ -570,32 +584,92 @@ displayed. It helps assessing the changes importance.
 			return err
 		}
 	}
-	w := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
+	opts := options{
+		writer:     os.Stdout,
+		confidence: 0.9,
+		words:      *words,
+	}
+	return formatter(licenses, opts)
+}
+
+type formatFunc func([]License, options) error
+
+type options struct {
+	writer     io.Writer
+	confidence float64
+	words      bool
+}
+
+func formatText(licenses []License, opts options) error {
+	w := tabwriter.NewWriter(opts.writer, 1, 4, 2, ' ', 0)
 	for _, l := range licenses {
 		license := "?"
 		if l.Template != nil {
-			if l.Score > .99 {
-				license = fmt.Sprintf("%s", l.Template.Title)
-			} else if l.Score >= confidence {
+			switch {
+			case l.Score > .99:
+				license = l.Template.Title
+			case l.Score >= opts.confidence:
 				license = fmt.Sprintf("%s (%2d%%)", l.Template.Title, int(100*l.Score))
-				if *words && len(l.ExtraWords) > 0 {
+				if opts.words && len(l.ExtraWords) > 0 {
 					license += "\n\t+words: " + strings.Join(l.ExtraWords, ", ")
 				}
-				if *words && len(l.MissingWords) > 0 {
+				if opts.words && len(l.MissingWords) > 0 {
 					license += "\n\t-words: " + strings.Join(l.MissingWords, ", ")
 				}
-			} else {
+			default:
 				license = fmt.Sprintf("? (%s, %2d%%)", l.Template.Title, int(100*l.Score))
 			}
 		} else if l.Err != "" {
 			license = strings.Replace(l.Err, "\n", " ", -1)
 		}
-		_, err = w.Write([]byte(l.Package + "\t" + license + "\n"))
+		_, err := io.WriteString(w, l.Package+"\t"+license+"\n")
 		if err != nil {
 			return err
 		}
 	}
 	return w.Flush()
+}
+
+func formatJSON(licenses []License, opts options) error {
+	if !opts.words {
+		trimWords(licenses)
+	}
+	data := struct {
+		Packages []License `json:"packages"`
+	}{
+		licenses,
+	}
+	enc := json.NewEncoder(opts.writer)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "\t")
+	return enc.Encode(data)
+}
+
+func formatCSV(licenses []License, opts options) error {
+	w := csv.NewWriter(opts.writer)
+	w.Write([]string{"package", "score", "license", "path"})
+	for _, license := range licenses {
+		var title string
+		if license.Template != nil {
+			title = license.Template.Title
+		}
+		w.Write([]string{
+			license.Package,
+			fmt.Sprintf("%.2f", license.Score),
+			title,
+			license.Path,
+		})
+	}
+	w.Flush()
+	return w.Error()
+}
+
+func trimWords(licenses []License) {
+	for i := range licenses {
+		license := &licenses[i]
+		license.ExtraWords = nil
+		license.MissingWords = nil
+	}
 }
 
 func main() {
